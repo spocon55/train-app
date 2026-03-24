@@ -1,0 +1,17 @@
+{
+  "name": "青葉台→飯田橋 乗換案内",
+  "short_name": "乗換案内",
+  "description": "青葉台から永田町乗換で飯田橋への乗換案内",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1565c0",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231565c0'/><text y='.9em' font-size='80' x='10'>🚃</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

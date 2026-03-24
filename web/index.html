@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1565c0">
+  <title>青葉台 → 飯田橋 乗換案内</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f4f8;
+      color: #1a1a1a;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1565c0;
+      color: white;
+      padding: 14px 16px 12px;
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    header small {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 400;
+      opacity: 0.75;
+      margin-top: 2px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      margin: 12px;
+      padding: 14px 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+
+    /* ── ダイヤ種別 ── */
+    .day-tabs {
+      display: flex;
+      gap: 8px;
+    }
+    .day-tabs button {
+      flex: 1;
+      padding: 9px 0;
+      border: 2px solid #c5cae9;
+      border-radius: 8px;
+      background: white;
+      color: #3949ab;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .day-tabs button.active {
+      background: #1565c0;
+      border-color: #1565c0;
+      color: white;
+    }
+
+    /* ── 乗換バッファ ── */
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 12px;
+      font-size: 0.9rem;
+      color: #555;
+    }
+    .setting-row select {
+      border: 1px solid #c5cae9;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 0.9rem;
+      color: #1a1a1a;
+      background: white;
+    }
+
+    /* ── 検索モード ── */
+    .mode-tabs {
+      display: flex;
+      border: 2px solid #c5cae9;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .mode-tabs button {
+      flex: 1;
+      padding: 9px 0;
+      border: none;
+      background: white;
+      color: #3949ab;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mode-tabs button.active {
+      background: #1565c0;
+      color: white;
+    }
+
+    /* ── 時刻入力 ── */
+    .time-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+      align-items: center;
+    }
+    .time-row input[type="time"] {
+      flex: 1;
+      padding: 10px 12px;
+      border: 2px solid #c5cae9;
+      border-radius: 8px;
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #1a1a1a;
+      text-align: center;
+    }
+    .time-row input[type="time"]:focus {
+      outline: none;
+      border-color: #1565c0;
+    }
+    .search-btn {
+      padding: 10px 20px;
+      background: #1565c0;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .search-btn:active { background: #0d47a1; }
+
+    /* ── 結果カード ── */
+    #results { margin: 0 12px 20px; }
+
+    .route-card {
+      background: white;
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      border-left: 4px solid #1565c0;
+    }
+    .route-num {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #1565c0;
+      margin-bottom: 8px;
+      letter-spacing: 0.05em;
+    }
+    .route-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin: 5px 0;
+      font-size: 0.92rem;
+    }
+    .route-row .icon { font-size: 1rem; width: 1.4em; flex-shrink: 0; }
+    .route-row .time { font-weight: 700; font-size: 1.05rem; color: #1565c0; }
+    .route-row .label { color: #555; font-size: 0.85rem; }
+    .route-row .train-info { color: #333; }
+    .route-footer {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid #eee;
+      font-size: 0.82rem;
+      color: #777;
+      display: flex;
+      justify-content: space-between;
+    }
+    .approx-badge {
+      font-size: 0.72rem;
+      background: #fff3e0;
+      color: #e65100;
+      padding: 1px 5px;
+      border-radius: 4px;
+      margin-left: 4px;
+    }
+
+    /* ── エラー・ローディング ── */
+    .message {
+      text-align: center;
+      padding: 24px 16px;
+      color: #777;
+      font-size: 0.9rem;
+    }
+    .message.error { color: #c62828; }
+
+    /* ── フッター ── */
+    footer {
+      text-align: center;
+      padding: 12px;
+      font-size: 0.75rem;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  青葉台 → 飯田橋 乗換案内
+  <small id="generated-at">データ読込中...</small>
+</header>
+
+<!-- 設定カード -->
+<div class="card">
+  <div class="day-tabs">
+    <button id="tab-weekday" class="active" onclick="setDay('weekday')">平日</button>
+    <button id="tab-saturday" onclick="setDay('saturday')">土曜</button>
+    <button id="tab-holiday" onclick="setDay('holiday')">休日</button>
+  </div>
+  <div class="setting-row">
+    <span>永田町 乗換バッファ</span>
+    <select id="buffer-select" onchange="saveBuffer()">
+      <option value="3">3 分</option>
+      <option value="4">4 分</option>
+      <option value="5" selected>5 分</option>
+      <option value="6">6 分</option>
+      <option value="7">7 分</option>
+      <option value="8">8 分</option>
+      <option value="10">10 分</option>
+    </select>
+  </div>
+</div>
+
+<!-- 検索カード -->
+<div class="card">
+  <div class="mode-tabs">
+    <button id="mode-dep" class="active" onclick="setMode('dep')">出発時刻で検索</button>
+    <button id="mode-arr" onclick="setMode('arr')">到着時刻で逆算</button>
+  </div>
+  <div class="time-row">
+    <input type="time" id="time-input" value="08:30">
+    <button class="search-btn" onclick="doSearch()">検索</button>
+  </div>
+</div>
+
+<div id="results"></div>
+
+<footer id="footer"></footer>
+
+<script>
+// ── グローバル状態 ─────────────────────────────────────────────
+let appData = null;
+let dayType = 'weekday';
+let searchMode = 'dep';  // 'dep' | 'arr'
+
+// ── 初期化 ────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  loadBuffer();
+  setDefaultTime();
+  await loadData();
+});
+
+async function loadData() {
+  try {
+    const res = await fetch('data.json');
+    if (!res.ok) throw new Error('data.json の読み込みに失敗しました');
+    appData = await res.json();
+    document.getElementById('generated-at').textContent =
+      'データ更新: ' + (appData.generated_at || '不明');
+    document.getElementById('footer').textContent =
+      'データ更新: ' + (appData.generated_at || '不明');
+  } catch (e) {
+    document.getElementById('generated-at').textContent = 'データ読込エラー';
+    showMessage('データの読み込みに失敗しました。\n' + e.message, true);
+  }
+}
+
+function setDefaultTime() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  document.getElementById('time-input').value = `${hh}:${mm}`;
+}
+
+// ── 設定 ──────────────────────────────────────────────────────
+function setDay(d) {
+  dayType = d;
+  ['weekday','saturday','holiday'].forEach(k => {
+    document.getElementById(`tab-${k}`).classList.toggle('active', k === d);
+  });
+}
+
+function setMode(m) {
+  searchMode = m;
+  document.getElementById('mode-dep').classList.toggle('active', m === 'dep');
+  document.getElementById('mode-arr').classList.toggle('active', m === 'arr');
+}
+
+function saveBuffer() {
+  const val = document.getElementById('buffer-select').value;
+  localStorage.setItem('transferBuffer', val);
+}
+
+function loadBuffer() {
+  const saved = localStorage.getItem('transferBuffer');
+  if (saved) {
+    const sel = document.getElementById('buffer-select');
+    // オプション内に存在する値なら設定
+    if ([...sel.options].some(o => o.value === saved)) {
+      sel.value = saved;
+    }
+  }
+}
+
+function getBuffer() {
+  return parseInt(document.getElementById('buffer-select').value, 10);
+}
+
+// ── 時刻ユーティリティ ────────────────────────────────────────
+function toMin(t) {
+  const [h, m] = t.split(':').map(Number);
+  return (h < 5 ? h + 24 : h) * 60 + m;
+}
+
+function fromMin(total) {
+  const h = Math.floor(total / 60) % 24;
+  const m = total % 60;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}
+
+// ── ルート構築 ────────────────────────────────────────────────
+const NAGATACHO_TO_IIDABASHI = 3;  // 有楽町線
+
+function buildRoutes(aobadaiTrains, yurakuchoEntries, transferBuffer) {
+  const routes = [];
+
+  for (const train of aobadaiTrains) {
+    const depMin = toMin(train.time);
+
+    // 永田町着時刻
+    let nagatachoMin;
+    let timeSource;
+    if (train.nagatacho_arr) {
+      nagatachoMin = toMin(train.nagatacho_arr);
+      timeSource = 'actual';
+    } else {
+      nagatachoMin = depMin + 51;  // 近似
+      timeSource = 'approx';
+    }
+
+    // 永田町発（有楽町線）の最初の便
+    let best = null;
+    for (const e of yurakuchoEntries) {
+      const tMin = toMin(e.time);
+      if (tMin >= nagatachoMin + transferBuffer) {
+        if (!best || tMin < toMin(best.dep)) {
+          best = { dep: e.time, depMin: tMin };
+        }
+      }
+    }
+
+    if (best) {
+      const iidabashiMin = best.depMin + NAGATACHO_TO_IIDABASHI;
+      routes.push({
+        aobadaiDep:    train.time,
+        aobadaiDepMin: depMin,
+        trainType:     train.type_ja,
+        dest:          train.dest,
+        nagatachoArr:  fromMin(nagatachoMin),
+        nagatachoDep:  best.dep,
+        iidabashiArr:  fromMin(iidabashiMin),
+        iidabashiMin:  iidabashiMin,
+        totalMin:      iidabashiMin - depMin,
+        timeSource:    timeSource,
+      });
+    }
+  }
+
+  routes.sort((a, b) => a.aobadaiDepMin - b.aobadaiDepMin);
+  return routes;
+}
+
+// ── 検索 ─────────────────────────────────────────────────────
+function doSearch() {
+  if (!appData) { showMessage('データを読み込み中です...'); return; }
+
+  const timeVal = document.getElementById('time-input').value;
+  if (!timeVal) { showMessage('時刻を入力してください'); return; }
+
+  const buffer = getBuffer();
+  const aobadai   = appData.aobadai[dayType] || [];
+  const yurakucho = appData.yurakucho_nagatacho[dayType] || [];
+  const routes    = buildRoutes(aobadai, yurakucho, buffer);
+
+  let matched;
+  if (searchMode === 'dep') {
+    const depMin = toMin(timeVal);
+    matched = routes.filter(r => r.aobadaiDepMin >= depMin).slice(0, 3);
+  } else {
+    const arrMin = toMin(timeVal);
+    matched = routes
+      .filter(r => r.iidabashiMin <= arrMin)
+      .sort((a, b) => b.aobadaiDepMin - a.aobadaiDepMin)
+      .slice(0, 3);
+  }
+
+  renderResults(matched, buffer);
+}
+
+// ── 描画 ─────────────────────────────────────────────────────
+function renderResults(routes, buffer) {
+  const el = document.getElementById('results');
+
+  if (routes.length === 0) {
+    el.innerHTML = '<div class="message">該当する電車が見つかりませんでした。</div>';
+    return;
+  }
+
+  el.innerHTML = routes.map((r, i) => {
+    const approxBadge = r.timeSource === 'approx'
+      ? '<span class="approx-badge">概算</span>' : '';
+
+    return `
+      <div class="route-card">
+        <div class="route-num">案 ${i + 1}</div>
+        <div class="route-row">
+          <span class="icon">🚉</span>
+          <span class="time">${r.aobadaiDep}</span>
+          <span class="train-info">各停・${r.dest}行</span>
+        </div>
+        <div class="route-row">
+          <span class="icon">📍</span>
+          <span class="time">${r.nagatachoArr}</span>
+          <span class="label">永田町着</span>
+          ${approxBadge}
+        </div>
+        <div class="route-row">
+          <span class="icon">⏱</span>
+          <span class="time">${r.nagatachoDep}</span>
+          <span class="label">永田町発（有楽町線）</span>
+        </div>
+        <div class="route-row">
+          <span class="icon">🏁</span>
+          <span class="time">${r.iidabashiArr}</span>
+          <span class="label">飯田橋着</span>
+        </div>
+        <div class="route-footer">
+          <span>所要時間 約 ${r.totalMin} 分</span>
+          <span>乗換バッファ ${buffer} 分</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function showMessage(msg, isError = false) {
+  document.getElementById('results').innerHTML =
+    `<div class="message${isError ? ' error' : ''}">${msg.replace(/\n/g,'<br>')}</div>`;
+}
+</script>
+
+</body>
+</html>
