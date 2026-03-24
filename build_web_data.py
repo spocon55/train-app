@@ -70,11 +70,12 @@ def fetch_yurakucho(calendar: str) -> list[dict]:
       1. odpt:trainNumber が一致する飯田橋エントリの発時刻
       2. 永田町発時刻 +4〜+9分 の時刻窓内で最初に見つかる飯田橋発時刻
     """
+    # 永田町→飯田橋 は「和光市方向」に乗る（飯田橋は永田町より和光市寄り）
     nagatacho_raw = fetch_odpt(
-        f"odpt.StationTimetable:TokyoMetro.Yurakucho.Nagatacho.TokyoMetro.ShinKiba.{calendar}"
+        f"odpt.StationTimetable:TokyoMetro.Yurakucho.Nagatacho.TokyoMetro.Wakoshi.{calendar}"
     )
     iidabashi_raw = fetch_odpt(
-        f"odpt.StationTimetable:TokyoMetro.Yurakucho.Iidabashi.TokyoMetro.ShinKiba.{calendar}"
+        f"odpt.StationTimetable:TokyoMetro.Yurakucho.Iidabashi.TokyoMetro.Wakoshi.{calendar}"
     )
 
     # 飯田橋: 列車番号 → 発時刻 の辞書

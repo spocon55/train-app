@@ -108,10 +108,10 @@ def fetch_nagatacho_timetable(day_type: str) -> dict:
     cal = "Weekday" if day_type == "weekday" else "SaturdayHoliday"
     result = {}
 
-    # 有楽町線（新木場方向 → 飯田橋通過）
+    # 有楽町線（和光市方向 → 飯田橋は永田町より和光市寄り）
     params = {
         "acl:consumerKey": API_KEY,
-        "owl:sameAs": f"odpt.StationTimetable:TokyoMetro.Yurakucho.Nagatacho.TokyoMetro.ShinKiba.{cal}",
+        "owl:sameAs": f"odpt.StationTimetable:TokyoMetro.Yurakucho.Nagatacho.TokyoMetro.Wakoshi.{cal}",
     }
     res = requests.get(BASE_URL + "odpt:StationTimetable", params=params, timeout=15)
     if res.status_code == 200 and res.json():
