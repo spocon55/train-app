@@ -212,11 +212,14 @@
 
 <!-- 設定カード -->
 <div class="card">
+  <!-- ダイヤ種別 -->
   <div class="day-tabs">
     <button id="tab-weekday" class="active" onclick="setDay('weekday')">平日</button>
     <button id="tab-saturday" onclick="setDay('saturday')">土曜</button>
     <button id="tab-holiday" onclick="setDay('holiday')">休日</button>
   </div>
+
+  <!-- 乗換バッファ -->
   <div class="setting-row">
     <span>永田町 乗換バッファ</span>
     <select id="buffer-select" onchange="saveBuffer()">
@@ -234,8 +237,8 @@
 <!-- 検索カード -->
 <div class="card">
   <div class="mode-tabs">
-    <button id="mode-dep" class="active" onclick="setMode('dep')">出発時刻で検索</button>
-    <button id="mode-arr" onclick="setMode('arr')">到着時刻で逆算</button>
+    <button id="mode-dep" class="active" onclick="setMode('dep')" id="mode-dep-btn">出発時刻で検索</button>
+    <button id="mode-arr" onclick="setMode('arr')" id="mode-arr-btn">到着時刻で逆算</button>
   </div>
   <div class="time-row">
     <input type="time" id="time-input" value="08:30">
@@ -244,16 +247,17 @@
 </div>
 
 <div id="results"></div>
-
 <footer id="footer"></footer>
 
 <script>
-// ── グローバル状態 ─────────────────────────────────────────────
-let appData = null;
-let dayType = 'weekday';
-let searchMode = 'dep';  // 'dep' | 'arr'
+// ── グローバル状態 ────────────────────────────────────────────
+let appData   = null;
+let dayType   = 'weekday';
+let searchMode = 'dep';   // 'dep' | 'arr'
 
-// ── 初期化 ────────────────────────────────────────────────────
+const IIDABASHI_FALLBACK_MIN = 6;   // 有楽町線フォールバック（iidabashi_depがない場合）
+
+// ── 初期化 ───────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
   loadBuffer();
   setDefaultTime();
@@ -265,10 +269,9 @@ async function loadData() {
     const res = await fetch('data.json');
     if (!res.ok) throw new Error('data.json の読み込みに失敗しました');
     appData = await res.json();
-    document.getElementById('generated-at').textContent =
-      'データ更新: ' + (appData.generated_at || '不明');
-    document.getElementById('footer').textContent =
-      'データ更新: ' + (appData.generated_at || '不明');
+    const ts = 'データ更新: ' + (appData.generated_at || '不明');
+    document.getElementById('generated-at').textContent = ts;
+    document.getElementById('footer').textContent = ts;
   } catch (e) {
     document.getElementById('generated-at').textContent = 'データ読込エラー';
     showMessage('データの読み込みに失敗しました。\n' + e.message, true);
@@ -277,17 +280,16 @@ async function loadData() {
 
 function setDefaultTime() {
   const now = new Date();
-  const hh = String(now.getHours()).padStart(2, '0');
-  const mm = String(now.getMinutes()).padStart(2, '0');
-  document.getElementById('time-input').value = `${hh}:${mm}`;
+  document.getElementById('time-input').value =
+    String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
 }
 
-// ── 設定 ──────────────────────────────────────────────────────
+// ── 設定 ────────────────────────────────────────────────────
 function setDay(d) {
   dayType = d;
-  ['weekday','saturday','holiday'].forEach(k => {
-    document.getElementById(`tab-${k}`).classList.toggle('active', k === d);
-  });
+  ['weekday','saturday','holiday'].forEach(k =>
+    document.getElementById(`tab-${k}`).classList.toggle('active', k === d)
+  );
 }
 
 function setMode(m) {
@@ -297,18 +299,14 @@ function setMode(m) {
 }
 
 function saveBuffer() {
-  const val = document.getElementById('buffer-select').value;
-  localStorage.setItem('transferBuffer', val);
+  localStorage.setItem('transferBuffer', document.getElementById('buffer-select').value);
 }
 
 function loadBuffer() {
   const saved = localStorage.getItem('transferBuffer');
   if (saved) {
     const sel = document.getElementById('buffer-select');
-    // オプション内に存在する値なら設定
-    if ([...sel.options].some(o => o.value === saved)) {
-      sel.value = saved;
-    }
+    if ([...sel.options].some(o => o.value === saved)) sel.value = saved;
   }
 }
 
@@ -323,133 +321,106 @@ function toMin(t) {
 }
 
 function fromMin(total) {
-  const h = Math.floor(total / 60) % 24;
-  const m = total % 60;
-  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  return String(Math.floor(total / 60) % 24).padStart(2,'0') + ':' + String(total % 60).padStart(2,'0');
 }
 
-// ── ルート構築 ────────────────────────────────────────────────
-const NAGATACHO_TO_IIDABASHI = 3;  // 有楽町線
-
-function buildRoutes(aobadaiTrains, yurakuchoEntries, transferBuffer) {
+// ── 【青葉台→飯田橋】ルート構築 ──────────────────────────────
+function buildFwdRoutes(aobadaiTrains, yurakuchoEntries, buffer) {
   const routes = [];
-
   for (const train of aobadaiTrains) {
     const depMin = toMin(train.time);
+    const nagatachoMin = train.nagatacho_arr ? toMin(train.nagatacho_arr) : depMin + 51;
+    const isApprox = !train.nagatacho_arr;
 
-    // 永田町着時刻
-    let nagatachoMin;
-    let timeSource;
-    if (train.nagatacho_arr) {
-      nagatachoMin = toMin(train.nagatacho_arr);
-      timeSource = 'actual';
-    } else {
-      nagatachoMin = depMin + 51;  // 近似
-      timeSource = 'approx';
-    }
-
-    // 永田町発（有楽町線）の最初の便
     let best = null;
     for (const e of yurakuchoEntries) {
-      const tMin = toMin(e.time);
-      if (tMin >= nagatachoMin + transferBuffer) {
-        if (!best || tMin < toMin(best.dep)) {
-          best = { dep: e.time, depMin: tMin };
-        }
-      }
+      const t = toMin(e.time);
+      if (t >= nagatachoMin + buffer && (!best || t < best.t))
+        best = { dep: e.time, t, iidabashiDep: e.iidabashi_dep || null };
     }
+    if (!best) continue;
 
-    if (best) {
-      const iidabashiMin = best.depMin + NAGATACHO_TO_IIDABASHI;
-      routes.push({
-        aobadaiDep:    train.time,
-        aobadaiDepMin: depMin,
-        trainType:     train.type_ja,
-        dest:          train.dest,
-        nagatachoArr:  fromMin(nagatachoMin),
-        nagatachoDep:  best.dep,
-        iidabashiArr:  fromMin(iidabashiMin),
-        iidabashiMin:  iidabashiMin,
-        totalMin:      iidabashiMin - depMin,
-        timeSource:    timeSource,
-      });
-    }
+    const iidabashiMin = best.iidabashiDep
+      ? toMin(best.iidabashiDep)
+      : best.t + IIDABASHI_FALLBACK_MIN;
+    routes.push({
+      depStation: '青葉台', depTime: train.time, depMin,
+      trainInfo: `各停・${train.dest}行`,
+      nagatachoArr: fromMin(nagatachoMin),
+      nagatachoDep: best.dep,
+      arrStation: '飯田橋', arrTime: fromMin(iidabashiMin), arrMin: iidabashiMin,
+      nagatachoLine: '有楽町線',
+      totalMin: iidabashiMin - depMin,
+      isApprox,
+    });
   }
-
-  routes.sort((a, b) => a.aobadaiDepMin - b.aobadaiDepMin);
+  routes.sort((a, b) => a.depMin - b.depMin);
   return routes;
 }
 
-// ── 検索 ─────────────────────────────────────────────────────
+// ── 検索 ────────────────────────────────────────────────────
 function doSearch() {
   if (!appData) { showMessage('データを読み込み中です...'); return; }
-
   const timeVal = document.getElementById('time-input').value;
   if (!timeVal) { showMessage('時刻を入力してください'); return; }
 
   const buffer = getBuffer();
-  const aobadai   = appData.aobadai[dayType] || [];
-  const yurakucho = appData.yurakucho_nagatacho[dayType] || [];
-  const routes    = buildRoutes(aobadai, yurakucho, buffer);
-
+  const routes = buildFwdRoutes(
+    appData.aobadai[dayType] || [],
+    appData.yurakucho_nagatacho[dayType] || [],
+    buffer
+  );
   let matched;
   if (searchMode === 'dep') {
-    const depMin = toMin(timeVal);
-    matched = routes.filter(r => r.aobadaiDepMin >= depMin).slice(0, 3);
+    const t = toMin(timeVal);
+    matched = routes.filter(r => r.depMin >= t).slice(0, 3);
   } else {
-    const arrMin = toMin(timeVal);
-    matched = routes
-      .filter(r => r.iidabashiMin <= arrMin)
-      .sort((a, b) => b.aobadaiDepMin - a.aobadaiDepMin)
-      .slice(0, 3);
+    const t = toMin(timeVal);
+    matched = routes.filter(r => r.arrMin <= t).sort((a,b) => b.depMin - a.depMin).slice(0, 3);
   }
 
   renderResults(matched, buffer);
 }
 
-// ── 描画 ─────────────────────────────────────────────────────
+// ── 描画 ────────────────────────────────────────────────────
 function renderResults(routes, buffer) {
   const el = document.getElementById('results');
-
   if (routes.length === 0) {
     el.innerHTML = '<div class="message">該当する電車が見つかりませんでした。</div>';
     return;
   }
 
   el.innerHTML = routes.map((r, i) => {
-    const approxBadge = r.timeSource === 'approx'
-      ? '<span class="approx-badge">概算</span>' : '';
-
+    const approxBadge = r.isApprox ? '<span class="approx-badge">概算</span>' : '';
     return `
       <div class="route-card">
         <div class="route-num">案 ${i + 1}</div>
         <div class="route-row">
           <span class="icon">🚉</span>
-          <span class="time">${r.aobadaiDep}</span>
-          <span class="train-info">各停・${r.dest}行</span>
+          <span class="time">${r.depTime}</span>
+          <span class="train-info">${r.depStation}発　${r.trainInfo}</span>
         </div>
         <div class="route-row">
           <span class="icon">📍</span>
           <span class="time">${r.nagatachoArr}</span>
           <span class="label">永田町着</span>
-          ${approxBadge}
         </div>
         <div class="route-row">
           <span class="icon">⏱</span>
           <span class="time">${r.nagatachoDep}</span>
-          <span class="label">永田町発（有楽町線）</span>
+          <span class="label">永田町発（${r.nagatachoLine}）</span>
         </div>
         <div class="route-row">
           <span class="icon">🏁</span>
-          <span class="time">${r.iidabashiArr}</span>
-          <span class="label">飯田橋着</span>
+          <span class="time">${r.arrTime}</span>
+          <span class="label">${r.arrStation}着</span>
+          ${approxBadge}
         </div>
         <div class="route-footer">
           <span>所要時間 約 ${r.totalMin} 分</span>
           <span>乗換バッファ ${buffer} 分</span>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 }
 
@@ -458,6 +429,5 @@ function showMessage(msg, isError = false) {
     `<div class="message${isError ? ' error' : ''}">${msg.replace(/\n/g,'<br>')}</div>`;
 }
 </script>
-
 </body>
 </html>
